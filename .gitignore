@@ -216,11 +216,21 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-
 venv/
-.env
+.venv/
 __pycache__/
 *.pyc
-.idea/
+.pytest_cache/
 .vscode/
-attendance.db
+.idea/
+
+database/*.db
+
+output/corrected_images/*
+output/grayscale_images/*
+output/binary_images/*
+output/detected_tables/*
+output/signature_regions/*
+output/attendance_results/*
+output/graphs/*
+output/signature_reports/*

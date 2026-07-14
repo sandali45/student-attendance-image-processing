@@ -1,0 +1,8 @@
+opencv-python
+numpy
+matplotlib
+pandas
+lxml
+pytest
+pytest-cov
+scikit-image
