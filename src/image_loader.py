@@ -20,11 +20,7 @@ def _validate_image(image):
 
 
 def load_image(path):
-    """Load an image file (JPG/PNG/...) as a BGR numpy array.
 
-    Raises FileNotFoundError if the path does not exist and ValueError
-    if the file exists but cannot be decoded as an image.
-    """
     if not isinstance(path, (str, os.PathLike)):
         raise TypeError(
             f"Image path must be a string, got {type(path).__name__}")
