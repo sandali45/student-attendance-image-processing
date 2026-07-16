@@ -112,3 +112,28 @@ def _detect_by_saturation(image):
     if not MIN_SHEET_AREA_RATIO <= area_ratio <= MAX_SHEET_AREA_RATIO:
         return None
     return _contour_to_quad(largest)
+
+
+def _detect_by_edges(image):
+
+    gray = cv2.cvtColor(
+        image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+
+    edges = cv2.Canny(blurred, 50, 150)
+    edges = cv2.dilate(edges, np.ones((5, 5), np.uint8), iterations=2)
+
+    contours, _ = cv2.findContours(
+        edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    image_area = float(image.shape[0] * image.shape[1])
+
+    candidates = []
+    for contour in sorted(contours, key=cv2.contourArea, reverse=True)[:10]:
+        if cv2.contourArea(contour) < image_area * MIN_SHEET_AREA_RATIO:
+            break
+        candidates.append(_contour_to_quad(contour))
+
+    if not candidates:
+        return None
+
+    return max(candidates, key=lambda quad: _interior_brightness(gray, quad))
