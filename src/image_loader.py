@@ -139,6 +139,29 @@ def _detect_by_edges(image):
     return max(candidates, key=lambda quad: _interior_brightness(gray, quad))
 
 
+def correct_perspective(image, corners):
+
+    _validate_image(image)
+    corners = np.asarray(corners, dtype=np.float32)
+    if corners.shape != (4, 2):
+        raise ValueError(
+            f"Expected 4 corner points (4, 2), got shape {corners.shape}")
+
+    top_left, top_right, bottom_right, bottom_left = corners
+
+    width = int(max(np.linalg.norm(bottom_right - bottom_left),
+                    np.linalg.norm(top_right - top_left)))
+    height = int(max(np.linalg.norm(top_right - bottom_right),
+                     np.linalg.norm(top_left - bottom_left)))
+    if width < 1 or height < 1:
+        raise ValueError("Corner points collapse to a degenerate rectangle")
+
+    destination = np.array([[0, 0], [width - 1, 0],
+                            [width - 1, height - 1], [0, height - 1]],
+                           dtype=np.float32)
+    matrix = cv2.getPerspectiveTransform(corners, destination)
+    return cv2.warpPerspective(image, matrix, (width, height))
+
 def crop_sheet(image):
 
     corners = detect_sheet_boundary(image)
