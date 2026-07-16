@@ -133,6 +133,7 @@ def _detect_by_edges(image):
             break
         candidates.append(_contour_to_quad(contour))
 
-
+    if not candidates:
+     return None
 
     return max(candidates, key=lambda quad: _interior_brightness(gray, quad))
