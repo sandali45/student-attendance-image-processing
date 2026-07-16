@@ -137,3 +137,9 @@ def _detect_by_edges(image):
      return None
 
     return max(candidates, key=lambda quad: _interior_brightness(gray, quad))
+
+
+def crop_sheet(image):
+    """Detect the sheet boundary and return the corrected, cropped sheet."""
+    corners = detect_sheet_boundary(image)
+    return correct_perspective(image, corners)
