@@ -140,6 +140,35 @@ def _detect_by_edges(image):
 
 
 def crop_sheet(image):
-    """Detect the sheet boundary and return the corrected, cropped sheet."""
+
     corners = detect_sheet_boundary(image)
     return correct_perspective(image, corners)
+
+
+def process_sheet_image(path, output_dir=OUTPUT_DIR):
+
+    name = os.path.splitext(os.path.basename(path))[0]
+    os.makedirs(output_dir, exist_ok=True)
+
+    print(f"[1/4] Loading image: {path}")
+    image = load_image(path)
+
+    print(f"[2/4] Resizing from {image.shape[1]}x{image.shape[0]}")
+    image = resize_image(image)
+
+    print("[3/4] Detecting sheet boundary")
+    corners = detect_sheet_boundary(image)
+    boundary_preview = image.copy()
+    cv2.polylines(boundary_preview, [
+                  corners.astype(np.int32)], True, (0, 255, 0), 3)
+
+    print("[4/4] Correcting perspective and cropping")
+    corrected = correct_perspective(image, corners)
+
+    cv2.imwrite(os.path.join(output_dir, f"{name}_original.png"), image)
+    cv2.imwrite(os.path.join(
+        output_dir, f"{name}_boundary.png"), boundary_preview)
+    cv2.imwrite(os.path.join(output_dir, f"{name}_corrected.png"), corrected)
+    print(f"Saved original, boundary and corrected images to {output_dir}")
+
+    return corrected
