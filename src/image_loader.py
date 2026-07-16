@@ -74,3 +74,19 @@ def rotate_image(image, angle):
 
     return cv2.warpAffine(image, matrix, (new_width, new_height),
                           borderValue=(255, 255, 255))
+
+
+def detect_sheet_boundary(image):
+
+    _validate_image(image)
+
+    best_quad = _detect_by_saturation(image)
+    if best_quad is None:
+        best_quad = _detect_by_edges(image)
+
+    if best_quad is None:
+        height, width = image.shape[:2]
+        best_quad = np.array([[0, 0], [width - 1, 0],
+                              [width - 1, height - 1], [0, height - 1]])
+
+    return _order_corners(np.asarray(best_quad, dtype=np.float32))
