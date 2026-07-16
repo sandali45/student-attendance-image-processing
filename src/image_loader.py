@@ -184,3 +184,26 @@ def _order_corners(corners):
     ordered[1] = corners[np.argmin(diffs)]  # top-right: smallest y - x
     ordered[3] = corners[np.argmax(diffs)]  # bottom-left: largest y - x
     return ordered
+
+
+def _contour_to_quad(contour):
+
+    perimeter = cv2.arcLength(contour, True)
+    approx = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
+    if len(approx) == 4:
+        return approx.reshape(4, 2)
+    return cv2.boxPoints(cv2.minAreaRect(contour))
+
+
+def _interior_brightness(gray, quad):
+
+    mask = np.zeros(gray.shape, dtype=np.uint8)
+    cv2.fillPoly(mask, [np.asarray(quad, dtype=np.int32)], 255)
+    return cv2.mean(gray, mask=mask)[0]
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Usage: python -m src.image_loader <image_path>")
+        sys.exit(1)
+    process_sheet_image(sys.argv[1])
