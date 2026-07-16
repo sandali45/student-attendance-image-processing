@@ -31,3 +31,24 @@ def load_image(path):
     if image is None:
         raise ValueError(f"File exists but is not a readable image: {path}")
     return image
+
+
+def resize_image(image, max_dimension=DEFAULT_MAX_DIMENSION):
+
+    _validate_image(image)
+    if max_dimension <= 0:
+        raise ValueError(
+            f"max_dimension must be positive, got {max_dimension}")
+
+    height, width = image.shape[:2]
+    longest = max(height, width)
+    if longest <= max_dimension:
+        return image
+
+    scale = max_dimension / longest
+
+    new_width = int(round(width * scale))
+    new_height = int(round(height * scale))
+
+    new_size = (new_width, new_height)
+    return cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
