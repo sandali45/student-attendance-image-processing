@@ -52,3 +52,25 @@ def resize_image(image, max_dimension=DEFAULT_MAX_DIMENSION):
 
     new_size = (new_width, new_height)
     return cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
+
+
+def rotate_image(image, angle):
+
+    _validate_image(image)
+
+    height, width = image.shape[:2]
+    center = (width / 2.0, height / 2.0)
+    matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+
+    # New bounding size after rotation.
+    cos = abs(matrix[0, 0])
+    sin = abs(matrix[0, 1])
+    new_width = int(height * sin + width * cos)
+    new_height = int(height * cos + width * sin)
+
+    # Shift so the rotated image stays centered in the new canvas.
+    matrix[0, 2] += (new_width / 2.0) - center[0]
+    matrix[1, 2] += (new_height / 2.0) - center[1]
+
+    return cv2.warpAffine(image, matrix, (new_width, new_height),
+                          borderValue=(255, 255, 255))
