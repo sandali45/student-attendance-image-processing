@@ -90,3 +90,25 @@ def detect_sheet_boundary(image):
                               [width - 1, height - 1], [0, height - 1]])
 
     return _order_corners(np.asarray(best_quad, dtype=np.float32))
+
+
+def _detect_by_saturation(image):
+
+    saturation = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)[:, :, 1]
+    saturation = cv2.GaussianBlur(saturation, (5, 5), 0)
+    _, mask = cv2.threshold(saturation, 0, 255,
+                            cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((9, 9), np.uint8))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
+
+    contours, _ = cv2.findContours(
+        mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+    largest = max(contours, key=cv2.contourArea)
+
+    image_area = float(image.shape[0] * image.shape[1])
+    area_ratio = cv2.contourArea(largest) / image_area
+    if not MIN_SHEET_AREA_RATIO <= area_ratio <= MAX_SHEET_AREA_RATIO:
+        return None
+    return _contour_to_quad(largest)
