@@ -172,3 +172,15 @@ def process_sheet_image(path, output_dir=OUTPUT_DIR):
     print(f"Saved original, boundary and corrected images to {output_dir}")
 
     return corrected
+
+
+def _order_corners(corners):
+
+    ordered = np.zeros((4, 2), dtype=np.float32)
+    sums = corners.sum(axis=1)
+    diffs = np.diff(corners, axis=1).ravel()  # y - x
+    ordered[0] = corners[np.argmin(sums)]   # top-left: smallest x + y
+    ordered[2] = corners[np.argmax(sums)]   # bottom-right: largest x + y
+    ordered[1] = corners[np.argmin(diffs)]  # top-right: smallest y - x
+    ordered[3] = corners[np.argmax(diffs)]  # bottom-left: largest y - x
+    return ordered
