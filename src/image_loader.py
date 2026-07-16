@@ -80,7 +80,7 @@ def detect_sheet_boundary(image):
 
     _validate_image(image)
 
-    best_quad = _detect_by_saturation(image)
+    best_quad = _detect_by_saturation(image) if image.ndim == 3 else None
     if best_quad is None:
         best_quad = _detect_by_edges(image)
 
