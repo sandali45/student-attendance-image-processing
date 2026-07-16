@@ -227,6 +227,6 @@ def _interior_brightness(gray, quad):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python -m src.image_loader <image_path>")
+
         sys.exit(1)
     process_sheet_image(sys.argv[1])
