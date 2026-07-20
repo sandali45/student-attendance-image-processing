@@ -1,7 +1,3 @@
-# tests/test_thresholding.py
-# Basic tests for the binarization functions.
-# run with: pytest tests/test_thresholding.py -v
-
 import sys
 import os
 import numpy as np

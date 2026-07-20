@@ -1,14 +1,3 @@
-# src/thresholding.py
-# Member 3 - Binarization
-#
-# This file takes the grayscale image from Member 2 and turns it into
-# a black and white (binary) image. We try 3 different thresholding
-# methods, clean up the result a bit, and then pick whichever one
-# looks best.
-#
-# Rule I'm using everywhere: after thresholding, the pixel is either
-# 0 (black = ink / signature / table lines) or 255 (white = paper).
-
 import os
 import cv2
 import numpy as np
