@@ -14,11 +14,11 @@ from src.image_preprocessing import (
 # -------------------------------------------------------
 
 INPUT_DIR = Path(
-    "output/corrected_images/image_loader/Corrected_images"
+    "output/corrected_images"
 )
 
 OUTPUT_DIR = Path(
-    "output/corrected_images/grayscale_images"
+    "output/grayscale_images"
 )
 
 # Create output folders
