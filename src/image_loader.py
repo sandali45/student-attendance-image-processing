@@ -11,7 +11,9 @@ DEFAULT_MAX_DIMENSION = 1500
 MIN_SHEET_AREA_RATIO = 0.20
 MAX_SHEET_AREA_RATIO = 0.98
 
-OUTPUT_DIR = os.path.join("output", "corrected_images")
+OUTPUT_DIR_corrected_images = os.path.join("output", "corrected_images")
+OUTPUT_DIR_original_images = os.path.join("output", "original_images")
+OUTPUT_DIR_boundary_images = os.path.join("output", "boundary_images")
 
 
 def _validate_image(image):
@@ -168,10 +170,87 @@ def crop_sheet(image):
     return correct_perspective(image, corners)
 
 
-def process_sheet_image(path, output_dir=OUTPUT_DIR):
+def _ink_mask(gray):
+    """Binary mask of genuine dark ink, robust to shadows/uneven lighting.
+
+    Dividing by a heavily blurred copy flattens the illumination gradient, so
+    smooth shadows and paper texture fall away and only real strokes remain.
+    """
+    background = cv2.GaussianBlur(gray, (0, 0), 25)
+    normalized = cv2.divide(gray, background, scale=255)
+    return cv2.threshold(normalized, 0, 255,
+                         cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+
+
+def _estimate_skew_angle(gray):
+    """Angle (degrees) the table lines are tilted from horizontal."""
+    thresh = _ink_mask(gray)
+    width = gray.shape[1]
+    h_kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (max(20, width // 30), 1))
+    horizontal = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, h_kernel)
+
+    lines = cv2.HoughLinesP(horizontal, 1, np.pi / 180, threshold=100,
+                            minLineLength=width // 4, maxLineGap=20)
+    if lines is None:
+        return 0.0
+
+    angles = []
+    for x1, y1, x2, y2 in lines.reshape(-1, 4):
+        angle = np.degrees(np.arctan2(float(y2 - y1), float(x2 - x1)))
+        if abs(angle) <= 20:
+            angles.append(angle)
+    if not angles:
+        return 0.0
+    return float(np.median(angles))
+
+
+def deskew_image(image):
+    """Rotate so the table's ruled lines become horizontal/vertical."""
+    _validate_image(image)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    angle = _estimate_skew_angle(gray)
+    if abs(angle) < 0.1:
+        return image
+    return rotate_image(image, angle)
+
+
+def crop_to_content(image, margin=20):
+    """Crop to the main written block (title + table), dropping blank paper."""
+    _validate_image(image)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+
+    thresh = _ink_mask(gray)
+    # Drop specks, then fatten strokes so nearby text/lines fuse into one block.
+    thresh = cv2.morphologyEx(
+        thresh, cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+    dilated = cv2.dilate(
+        thresh, cv2.getStructuringElement(cv2.MORPH_RECT, (35, 35)))
+
+    contours, _ = cv2.findContours(
+        dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return image
+
+    # The title + table form the biggest connected block; stray marks
+    # (page annotations, punch-hole shadows) stay as smaller separate blobs.
+    largest = max(contours, key=cv2.contourArea)
+    x, y, w, h = cv2.boundingRect(largest)
+
+    x0 = max(x - margin, 0)
+    y0 = max(y - margin, 0)
+    x1 = min(x + w + margin, image.shape[1])
+    y1 = min(y + h + margin, image.shape[0])
+    return image[y0:y1, x0:x1]
+
+
+def process_sheet_image(path):
 
     name = os.path.splitext(os.path.basename(path))[0]
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(OUTPUT_DIR_corrected_images, exist_ok=True)
+    os.makedirs(OUTPUT_DIR_original_images, exist_ok=True)
+    os.makedirs(OUTPUT_DIR_boundary_images, exist_ok=True)
 
     print(f"[1/4] Loading image: {path}")
     image = load_image(path)
@@ -185,14 +264,19 @@ def process_sheet_image(path, output_dir=OUTPUT_DIR):
     cv2.polylines(boundary_preview, [
                   corners.astype(np.int32)], True, (0, 255, 0), 3)
 
-    print("[4/4] Correcting perspective and cropping")
+    print("[4/4] Correcting perspective, deskewing and cropping to content")
     corrected = correct_perspective(image, corners)
+    corrected = deskew_image(corrected)
+    corrected = crop_to_content(corrected)
 
-    cv2.imwrite(os.path.join(output_dir, f"{name}_original.png"), image)
+    cv2.imwrite(os.path.join(OUTPUT_DIR_original_images,
+                f"{name}_original.png"), image)
     cv2.imwrite(os.path.join(
-        output_dir, f"{name}_boundary.png"), boundary_preview)
-    cv2.imwrite(os.path.join(output_dir, f"{name}_corrected.png"), corrected)
-    print(f"Saved original, boundary and corrected images to {output_dir}")
+        OUTPUT_DIR_boundary_images, f"{name}_boundary.png"), boundary_preview)
+    cv2.imwrite(os.path.join(OUTPUT_DIR_corrected_images,
+                f"{name}_corrected.png"), corrected)
+    print(
+        f"Saved original, boundary and corrected images to {OUTPUT_DIR_corrected_images}")
 
     return corrected
 
