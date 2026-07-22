@@ -226,7 +226,7 @@ __pycache__/
 
 database/*.db
 
-output/corrected_images/*
+
 output/grayscale_images/*
 output/binary_images/*
 output/detected_tables/*
