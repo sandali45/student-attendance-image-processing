@@ -11,7 +11,9 @@ DEFAULT_MAX_DIMENSION = 1500
 MIN_SHEET_AREA_RATIO = 0.20
 MAX_SHEET_AREA_RATIO = 0.98
 
-OUTPUT_DIR = os.path.join("output", "corrected_images")
+OUTPUT_DIR_corrected_images = os.path.join("output", "corrected_images")
+OUTPUT_DIR_original_images = os.path.join("output", "original_images")
+OUTPUT_DIR_boundary_images = os.path.join("output", "boundary_images")
 
 
 def _validate_image(image):
@@ -168,10 +170,12 @@ def crop_sheet(image):
     return correct_perspective(image, corners)
 
 
-def process_sheet_image(path, output_dir=OUTPUT_DIR):
+def process_sheet_image(path):
 
     name = os.path.splitext(os.path.basename(path))[0]
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(OUTPUT_DIR_corrected_images, exist_ok=True)
+    os.makedirs(OUTPUT_DIR_original_images, exist_ok=True)
+    os.makedirs(OUTPUT_DIR_boundary_images, exist_ok=True)
 
     print(f"[1/4] Loading image: {path}")
     image = load_image(path)
@@ -188,11 +192,14 @@ def process_sheet_image(path, output_dir=OUTPUT_DIR):
     print("[4/4] Correcting perspective and cropping")
     corrected = correct_perspective(image, corners)
 
-    cv2.imwrite(os.path.join(output_dir, f"{name}_original.png"), image)
+    cv2.imwrite(os.path.join(OUTPUT_DIR_original_images,
+                f"{name}_original.png"), image)
     cv2.imwrite(os.path.join(
-        output_dir, f"{name}_boundary.png"), boundary_preview)
-    cv2.imwrite(os.path.join(output_dir, f"{name}_corrected.png"), corrected)
-    print(f"Saved original, boundary and corrected images to {output_dir}")
+        OUTPUT_DIR_boundary_images, f"{name}_boundary.png"), boundary_preview)
+    cv2.imwrite(os.path.join(OUTPUT_DIR_corrected_images,
+                f"{name}_corrected.png"), corrected)
+    print(
+        f"Saved original, boundary and corrected images to {OUTPUT_DIR_corrected_images}")
 
     return corrected
 
