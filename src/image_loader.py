@@ -171,11 +171,7 @@ def crop_sheet(image):
 
 
 def _ink_mask(gray):
-    """Binary mask of genuine dark ink, robust to shadows/uneven lighting.
 
-    Dividing by a heavily blurred copy flattens the illumination gradient, so
-    smooth shadows and paper texture fall away and only real strokes remain.
-    """
     background = cv2.GaussianBlur(gray, (0, 0), 25)
     normalized = cv2.divide(gray, background, scale=255)
     return cv2.threshold(normalized, 0, 255,
@@ -183,7 +179,7 @@ def _ink_mask(gray):
 
 
 def _estimate_skew_angle(gray):
-    """Angle (degrees) the table lines are tilted from horizontal."""
+
     thresh = _ink_mask(gray)
     width = gray.shape[1]
     h_kernel = cv2.getStructuringElement(
@@ -206,7 +202,7 @@ def _estimate_skew_angle(gray):
 
 
 def deskew_image(image):
-    """Rotate so the table's ruled lines become horizontal/vertical."""
+
     _validate_image(image)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
     angle = _estimate_skew_angle(gray)
@@ -215,8 +211,124 @@ def deskew_image(image):
     return rotate_image(image, angle)
 
 
+def _detect_table_quad(gray):
+    """Four corners of the ruled table, found from its grid lines."""
+    mask = _ink_mask(gray)
+    height, width = gray.shape
+
+    h_kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (max(20, width // 25), 1))
+    v_kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (1, max(20, height // 25)))
+    horizontal = cv2.morphologyEx(mask, cv2.MORPH_OPEN, h_kernel)
+    vertical = cv2.morphologyEx(mask, cv2.MORPH_OPEN, v_kernel)
+
+    grid = cv2.bitwise_or(horizontal, vertical)
+    grid = cv2.dilate(
+        grid, cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7)))
+
+    contours, _ = cv2.findContours(
+        grid, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+
+    largest = max(contours, key=cv2.contourArea)
+    if cv2.contourArea(largest) < 0.05 * height * width:
+        return None
+    quad = _contour_to_quad(largest)
+    return _order_corners(np.asarray(quad, dtype=np.float32))
+
+
+def _align_verticals(image):
+    """Shear so the table's column lines become exactly vertical.
+
+    A rectangle-fitting homography can leave a slight shear (verticals tilted
+    while horizontals are level). A horizontal shear removes it: it slides
+    each row sideways in proportion to its height, so vertical strokes stand
+    upright and horizontal strokes are untouched.
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    height, width = gray.shape
+
+    mask = _ink_mask(gray)
+    v_kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (1, max(20, height // 25)))
+    vertical = cv2.morphologyEx(mask, cv2.MORPH_OPEN, v_kernel)
+
+    lines = cv2.HoughLinesP(vertical, 1, np.pi / 180, 80,
+                            minLineLength=height // 8, maxLineGap=15)
+    if lines is None:
+        return image
+
+    ratios = []
+    for x1, y1, x2, y2 in lines.reshape(-1, 4):
+        dx, dy = float(x2 - x1), float(y2 - y1)
+        if dy < 0:
+            dx, dy = -dx, -dy
+        if dy > 2 * abs(dx) and dy > 0:  # near-vertical only
+            ratios.append(dx / dy)
+    if not ratios:
+        return image
+
+    shear = -float(np.median(ratios))
+    if abs(shear) < 0.002:
+        return image
+
+    matrix = np.array([[1, shear, 0], [0, 1, 0]], dtype=np.float32)
+    shift = -min(0.0, shear * height)  # keep all x >= 0 after the shear
+    matrix[0, 2] = shift
+    new_width = int(round(width + abs(shear) * height))
+    return cv2.warpAffine(image, matrix, (new_width, height),
+                          borderValue=(255, 255, 255))
+
+
+def rectify_by_table(image):
+    """Warp the page so the detected table is exactly axis-aligned.
+
+    Unlike a plain rotation, mapping the table's four corners onto an
+    upright rectangle also removes residual perspective, so every ruled
+    line becomes perfectly horizontal or vertical. The homography is applied
+    to the whole page (on an enlarged canvas) so the title text is preserved.
+    """
+    _validate_image(image)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+
+    quad = _detect_table_quad(gray)
+    if quad is None:
+        return deskew_image(image)
+
+    top_left, top_right, bottom_right, bottom_left = quad
+    width = max(np.linalg.norm(top_right - top_left),
+                np.linalg.norm(bottom_right - bottom_left))
+    height = max(np.linalg.norm(bottom_left - top_left),
+                 np.linalg.norm(bottom_right - top_right))
+    if width < 1 or height < 1:
+        return deskew_image(image)
+
+    destination = np.array([[0, 0], [width - 1, 0],
+                            [width - 1, height - 1], [0, height - 1]],
+                           dtype=np.float32)
+    matrix = cv2.getPerspectiveTransform(quad, destination)
+
+    # Grow the output canvas so nothing outside the table (e.g. the title)
+    # is clipped after the warp.
+    img_h, img_w = image.shape[:2]
+    img_corners = np.array([[0, 0], [img_w, 0], [img_w, img_h], [0, img_h]],
+                           dtype=np.float32).reshape(-1, 1, 2)
+    warped = cv2.perspectiveTransform(img_corners, matrix).reshape(-1, 2)
+    x_min, y_min = np.floor(warped.min(axis=0)).astype(int)
+    x_max, y_max = np.ceil(warped.max(axis=0)).astype(int)
+
+    offset = np.array([[1, 0, -x_min], [0, 1, -y_min], [0, 0, 1]],
+                      dtype=np.float32)
+    out_w = int(min(x_max - x_min, img_w * 3))
+    out_h = int(min(y_max - y_min, img_h * 3))
+    return cv2.warpPerspective(image, offset @ matrix, (out_w, out_h),
+                               borderValue=(255, 255, 255))
+
+
 def crop_to_content(image, margin=20):
-    """Crop to the main written block (title + table), dropping blank paper."""
+
     _validate_image(image)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
 
@@ -264,10 +376,18 @@ def process_sheet_image(path):
     cv2.polylines(boundary_preview, [
                   corners.astype(np.int32)], True, (0, 255, 0), 3)
 
-    print("[4/4] Correcting perspective, deskewing and cropping to content")
+    print("[4/4] Correcting perspective, aligning table and cropping to content")
     corrected = correct_perspective(image, corners)
-    corrected = deskew_image(corrected)
+    corrected = rectify_by_table(corrected)
     corrected = crop_to_content(corrected)
+    # With the table now filling the frame, straighten the columns. A single
+    # median shear may leave a fraction of a degree, so repeat until it
+    # converges, trimming the white wedges the shear leaves behind each time.
+    for _ in range(3):
+        straightened = _align_verticals(corrected)
+        if straightened is corrected:  # shear below threshold: already vertical
+            break
+        corrected = crop_to_content(straightened)
 
     cv2.imwrite(os.path.join(OUTPUT_DIR_original_images,
                 f"{name}_original.png"), image)

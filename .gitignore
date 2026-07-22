@@ -226,6 +226,7 @@ __pycache__/
 
 database/*.db
 
+
 # Keep generated image outputs visible in the repository
 output/*
 !output/
@@ -245,3 +246,4 @@ output/*
 !output/graphs/*.png
 !output/signature_reports/
 !output/signature_reports/*.png
+
