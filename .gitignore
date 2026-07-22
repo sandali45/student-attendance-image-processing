@@ -227,10 +227,23 @@ __pycache__/
 database/*.db
 
 
-output/grayscale_images/*
-output/binary_images/*
-output/detected_tables/*
-output/signature_regions/*
-output/attendance_results/*
-output/graphs/*
-output/signature_reports/*
+# Keep generated image outputs visible in the repository
+output/*
+!output/
+!output/corrected_images/
+!output/corrected_images/*.png
+!output/grayscale_images/
+!output/grayscale_images/*.png
+!output/binary_images/
+!output/binary_images/*.png
+!output/detected_tables/
+!output/detected_tables/*.png
+!output/signature_regions/
+!output/signature_regions/*.png
+!output/attendance_results/
+!output/attendance_results/*.png
+!output/graphs/
+!output/graphs/*.png
+!output/signature_reports/
+!output/signature_reports/*.png
+
