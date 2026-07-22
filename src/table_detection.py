@@ -78,15 +78,15 @@ def get_table_body_box(boxes):
 
 
 # use the narrow leftmost column (No. column) to get one box per student row
-def detect_row_boundaries(boxes, min_width_ratio=0.1, max_width_ratio=0.25, expected_rows=6):
+def detect_row_boundaries(boxes, min_width_ratio=0.1, max_width_ratio=0.3 , expected_rows=6):
     table_body = get_table_body_box(boxes)
     if table_body is None:
         return []
 
     tx, ty, tw, th = table_body
     y_start = ty + int(th * 0.05)
-    x_min = tx
-    x_max = tx + int(tw * 0.3)
+    x_min = tx + int(tw * 0.65)
+    x_max = tx + tw
 
     min_width = tw * min_width_ratio
     max_width = tw * max_width_ratio
@@ -100,7 +100,7 @@ def detect_row_boundaries(boxes, min_width_ratio=0.1, max_width_ratio=0.25, expe
     column_boxes.sort(key=lambda b: b[1])
 
     if expected_rows is not None and len(column_boxes) > expected_rows:
-        column_boxes = column_boxes[:expected_rows]
+        column_boxes = column_boxes[:-expected_rows:]
 
     return [(y, y + h) for (x, y, w, h) in column_boxes]
 
