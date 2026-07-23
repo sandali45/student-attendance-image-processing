@@ -1,180 +1,235 @@
 import os
-import sys
-
 import cv2
 import numpy as np
 
 
-CORRECTED_DIR = os.path.join("output", "corrected_images")
-BINARY_DIR = os.path.join("output", "binary_images")
+OUTPUT_DIR = os.path.join("output", "detected_tables")
 
-TABLE_OUTPUT_DIR = os.path.join("output", "detected_tables")
-ROWS_OUTPUT_DIR = os.path.join("output", "detected_rows")
-
-
-def _validate_image(image):
-    if not isinstance(image, np.ndarray) or image.size == 0:
-        raise ValueError("Expected a non-empty image (numpy array)")
+MIN_H_LINE_RATIO = 1 / 25
+MIN_V_LINE_RATIO = 1 / 25
+MIN_LINE_LENGTH = 20
+MIN_TABLE_AREA_RATIO = 0.05
 
 
-# detect horizontal lines using a wide morphological kernel
-def detect_horizontal_lines(binary_img, h_scale=30):
-    _validate_image(binary_img)
-    inverted = cv2.bitwise_not(binary_img)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (inverted.shape[1] // h_scale, 1))
-    return cv2.morphologyEx(inverted, cv2.MORPH_OPEN, kernel)
+class TableNotFoundError(ValueError):
+    pass
 
 
-# detect vertical lines using a tall morphological kernel
-def detect_vertical_lines(binary_img, v_scale=30):
-    _validate_image(binary_img)
-    inverted = cv2.bitwise_not(binary_img)
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, inverted.shape[0] // v_scale))
-    return cv2.morphologyEx(inverted, cv2.MORPH_OPEN, kernel)
+def check_image(img):
+    if img is None:
+        raise ValueError("image is None")
+    if not isinstance(img, np.ndarray) or img.size == 0:
+        raise ValueError("image is empty")
+    if len(img.shape) == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    if img.dtype != np.uint8:
+        img = img.astype(np.uint8)
+    return img
 
 
-def combine_grid_lines(horizontal_lines, vertical_lines):
-    _validate_image(horizontal_lines)
-    _validate_image(vertical_lines)
-    return cv2.addWeighted(horizontal_lines, 0.5, vertical_lines, 0.5, 0.0)
+def _ink_mask(binary_img):
+    return cv2.bitwise_not(binary_img)
 
 
-# find cell/table contours from the combined grid image
-# thresholds are ratio-based (relative to image size) so this works
-# consistently across different sheet resolutions
-def detect_table_boundary(grid_image, background_image, min_area_ratio=0.001,
-                           min_width_ratio=0.03, min_height_ratio=0.01):
-    _validate_image(grid_image)
-    _validate_image(background_image)
+def detect_horizontal_lines(binary_img, min_length_ratio=MIN_H_LINE_RATIO):
+    binary_img = check_image(binary_img)
+    height, width = binary_img.shape
 
-    img_h, img_w = grid_image.shape[:2]
-    img_area = img_h * img_w
+    ink = _ink_mask(binary_img)
+    kernel_len = max(MIN_LINE_LENGTH, int(width * min_length_ratio))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_len, 1))
+    horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN, kernel)
 
-    min_area = img_area * min_area_ratio
-    min_width = img_w * min_width_ratio
-    min_height = img_h * min_height_ratio
-
-    contours, _ = cv2.findContours(grid_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-    if len(background_image.shape) == 2:
-        preview = cv2.cvtColor(background_image, cv2.COLOR_GRAY2BGR)
-    else:
-        preview = background_image.copy()
-
-    boxes = []
-    for contour in contours:
-        x, y, w, h = cv2.boundingRect(contour)
-        if cv2.contourArea(contour) > min_area and w > min_width and h > min_height:
-            cv2.rectangle(preview, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            boxes.append((x, y, w, h))
-
-    return boxes, preview
+    return cv2.bitwise_not(horizontal)
 
 
-def get_table_body_box(boxes):
-    if not boxes:
-        return None
-    return max(boxes, key=lambda b: b[2] * b[3])
+def detect_vertical_lines(binary_img, min_length_ratio=MIN_V_LINE_RATIO):
+    binary_img = check_image(binary_img)
+    height, width = binary_img.shape
+
+    ink = _ink_mask(binary_img)
+    kernel_len = max(MIN_LINE_LENGTH, int(height * min_length_ratio))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, kernel_len))
+    vertical = cv2.morphologyEx(ink, cv2.MORPH_OPEN, kernel)
+
+    return cv2.bitwise_not(vertical)
 
 
-# use the narrow leftmost column (No. column) to get one box per student row
-def detect_row_boundaries(boxes, min_width_ratio=0.1, max_width_ratio=0.3 , expected_rows=6):
-    table_body = get_table_body_box(boxes)
-    if table_body is None:
+def combine_grid_lines(horizontal_img, vertical_img):
+    horizontal_img = check_image(horizontal_img)
+    vertical_img = check_image(vertical_img)
+    if horizontal_img.shape != vertical_img.shape:
+        raise ValueError("horizontal and vertical images must be the same size")
+
+    h_ink = _ink_mask(horizontal_img)
+    v_ink = _ink_mask(vertical_img)
+    combined_ink = cv2.bitwise_or(h_ink, v_ink)
+    combined_ink = cv2.dilate(combined_ink, np.ones((3, 3), np.uint8))
+    return cv2.bitwise_not(combined_ink)
+
+
+def detect_table_boundary(grid_img, min_area_ratio=MIN_TABLE_AREA_RATIO):
+    grid_img = check_image(grid_img)
+    height, width = grid_img.shape
+    image_area = float(height * width)
+
+    ink = _ink_mask(grid_img)
+    ink = cv2.dilate(ink, np.ones((5, 5), np.uint8))
+
+    contours, _ = cv2.findContours(ink, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        raise TableNotFoundError(
+            "No attendance table found: no grid lines detected in the image.")
+
+    largest = max(contours, key=cv2.contourArea)
+    area_ratio = cv2.contourArea(largest) / image_area
+    if area_ratio < min_area_ratio:
+        raise TableNotFoundError(
+            f"No attendance table found: largest grid region only covers "
+            f"{area_ratio:.1%} of the image (need at least {min_area_ratio:.0%}).")
+
+    x, y, w, h = cv2.boundingRect(largest)
+    x = max(0, x)
+    y = max(0, y)
+    w = min(w, width - x)
+    h = min(h, height - y)
+    return x, y, w, h
+
+
+def _line_positions(line_ink, axis, min_gap):
+    projection = line_ink.sum(axis=1 - axis).astype(np.float64)
+    threshold = projection.max() * 0.4
+    if threshold <= 0:
         return []
 
-    tx, ty, tw, th = table_body
-    y_start = ty + int(th * 0.05)
-    x_min = tx + int(tw * 0.65)
-    x_max = tx + tw
+    on_line = projection >= threshold
+    positions = []
+    start = None
+    for i, val in enumerate(on_line):
+        if val and start is None:
+            start = i
+        elif not val and start is not None:
+            positions.append((start + i - 1) // 2)
+            start = None
+    if start is not None:
+        positions.append((start + len(on_line) - 1) // 2)
 
-    min_width = tw * min_width_ratio
-    max_width = tw * max_width_ratio
-
-    column_boxes = []
-    for (x, y, w, h) in boxes:
-        if (x_min <= x <= x_max and min_width <= w <= max_width
-                and y > y_start and (x, y, w, h) != table_body):
-            column_boxes.append((x, y, w, h))
-
-    column_boxes.sort(key=lambda b: b[1])
-
-    if expected_rows is not None and len(column_boxes) > expected_rows:
-        column_boxes = column_boxes[:-expected_rows:]
-
-    return [(y, y + h) for (x, y, w, h) in column_boxes]
+    merged = []
+    for pos in positions:
+        if merged and pos - merged[-1] < min_gap:
+            continue
+        merged.append(pos)
+    return merged
 
 
-def draw_row_boundaries(background_image, row_boundaries):
-    _validate_image(background_image)
-    vis = background_image.copy()
-    width = vis.shape[1]
+def detect_row_boundaries(horizontal_img, table_bbox):
+    horizontal_img = check_image(horizontal_img)
+    x, y, w, h = table_bbox
+    if w <= 0 or h <= 0:
+        raise ValueError(f"Invalid table bounding box: {table_bbox}")
 
-    for i, (top, bottom) in enumerate(row_boundaries):
-        cv2.line(vis, (0, top), (width, top), (0, 0, 255), 2)
-        cv2.putText(vis, f"R{i + 1}", (5, (top + bottom) // 2),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+    cropped = horizontal_img[y:y + h, x:x + w]
+    ink = _ink_mask(cropped)
 
-    if row_boundaries:
-        cv2.line(vis, (0, row_boundaries[-1][1]), (width, row_boundaries[-1][1]), (0, 0, 255), 2)
+    line_ys = _line_positions(ink, axis=0, min_gap=max(5, h // 50))
+    if len(line_ys) < 2:
+        raise TableNotFoundError(
+            "Could not find enough horizontal lines to determine table rows.")
 
-    return vis
-
-
-def process_sheet_image(name, corrected_dir=CORRECTED_DIR, binary_dir=BINARY_DIR):
-    binary_path = os.path.join(binary_dir, f"{name}_cleaned_binary.png")
-    corrected_path = os.path.join(corrected_dir, f"{name}_corrected.png")
-
-    binary_img = cv2.imread(binary_path, cv2.IMREAD_GRAYSCALE)
-    corrected_img = cv2.imread(corrected_path, cv2.IMREAD_COLOR)
-
-    if binary_img is None:
-        raise FileNotFoundError(f"Binary image not found: {binary_path}")
-    if corrected_img is None:
-        raise FileNotFoundError(f"Corrected image not found: {corrected_path}")
-
-    os.makedirs(TABLE_OUTPUT_DIR, exist_ok=True)
-    os.makedirs(ROWS_OUTPUT_DIR, exist_ok=True)
-
-    print(f"[1/4] Detecting horizontal and vertical lines: {name}")
-    h_lines = detect_horizontal_lines(binary_img)
-    v_lines = detect_vertical_lines(binary_img)
-
-    print("[2/4] Combining grid lines")
-    grid = combine_grid_lines(h_lines, v_lines)
-
-    print("[3/4] Detecting table boundary")
-    boxes, table_preview = detect_table_boundary(grid, corrected_img)
-
-    print("[4/4] Detecting row boundaries")
-    row_boundaries = detect_row_boundaries(boxes)
-    rows_preview = draw_row_boundaries(corrected_img, row_boundaries)
-
-    cv2.imwrite(os.path.join(TABLE_OUTPUT_DIR, f"{name}_horizontal.png"), h_lines)
-    cv2.imwrite(os.path.join(TABLE_OUTPUT_DIR, f"{name}_vertical.png"), v_lines)
-    cv2.imwrite(os.path.join(TABLE_OUTPUT_DIR, f"{name}_table.png"), table_preview)
-    cv2.imwrite(os.path.join(ROWS_OUTPUT_DIR, f"{name}_rows.png"), rows_preview)
-
-    print(f"Sheet {name}: {len(boxes)} boxes, {len(row_boundaries)} rows detected")
-    print(f"Saved outputs to {TABLE_OUTPUT_DIR} and {ROWS_OUTPUT_DIR}")
-
-    return {"boxes": boxes, "row_boundaries": row_boundaries}
+    line_ys = sorted(line_ys)
+    rows = []
+    for top, bottom in zip(line_ys[:-1], line_ys[1:]):
+        rows.append((top + y, bottom + y))
+    return rows
 
 
-def run(sheet_names, corrected_dir=CORRECTED_DIR, binary_dir=BINARY_DIR):
-    results = {}
-    for name in sheet_names:
-        try:
-            results[name] = process_sheet_image(name, corrected_dir, binary_dir)
-        except FileNotFoundError as e:
-            print(f"Skipping sheet {name}: {e}")
-    return results
+def detect_signature_column(vertical_img, table_bbox):
+    vertical_img = check_image(vertical_img)
+    x, y, w, h = table_bbox
+    if w <= 0 or h <= 0:
+        raise ValueError(f"Invalid table bounding box: {table_bbox}")
+
+    cropped = vertical_img[y:y + h, x:x + w]
+    ink = _ink_mask(cropped)
+
+    line_xs = _line_positions(ink, axis=1, min_gap=max(5, w // 50))
+    if len(line_xs) < 2:
+        raise TableNotFoundError(
+            "Could not find enough vertical lines to determine the signature column.")
+
+    line_xs = sorted(line_xs)
+    col_left, col_right = line_xs[-2], line_xs[-1]
+    return col_left + x, col_right + x
+
+
+def process_table_detection(binary_image, source_name="table"):
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    print("[1/4] Detecting horizontal lines")
+    horizontal = detect_horizontal_lines(binary_image)
+
+    print("[2/4] Detecting vertical lines")
+    vertical = detect_vertical_lines(binary_image)
+
+    print("[3/4] Combining grid lines and locating the table")
+    grid = combine_grid_lines(horizontal, vertical)
+    bbox = detect_table_boundary(grid)
+
+    print("[4/4] Detecting row boundaries and the signature column")
+    rows = detect_row_boundaries(horizontal, bbox)
+    signature_column = detect_signature_column(vertical, bbox)
+
+    table_preview = cv2.cvtColor(binary_image, cv2.COLOR_GRAY2BGR) \
+        if binary_image.ndim == 2 else binary_image.copy()
+    x, y, w, h = bbox
+    cv2.rectangle(table_preview, (x, y), (x + w, y + h), (0, 255, 0), 3)
+    for top, bottom in rows:
+        cv2.line(table_preview, (x, top), (x + w, top), (255, 0, 0), 1)
+        cv2.line(table_preview, (x, bottom), (x + w, bottom), (255, 0, 0), 1)
+
+    cv2.imwrite(os.path.join(OUTPUT_DIR, f"{source_name}_horizontal_lines.png"), horizontal)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, f"{source_name}_vertical_lines.png"), vertical)
+    cv2.imwrite(os.path.join(OUTPUT_DIR, f"{source_name}_detected_table.png"), table_preview)
+    print(f"Saved horizontal/vertical/table images to {OUTPUT_DIR}")
+
+    return {
+        "table_boundary": bbox,
+        "rows": rows,
+        "signature_column": signature_column,
+    }
+
+
+def make_test_table_image(rows=4, cols=3, cell_w=140, cell_h=60, margin=40):
+    width = margin * 2 + cell_w * cols
+    height = margin * 2 + cell_h * rows
+    img = np.full((height, width), 255, dtype=np.uint8)
+
+    for r in range(rows + 1):
+        y = margin + r * cell_h
+        cv2.line(img, (margin, y), (margin + cell_w * cols, y), 0, 2)
+    for c in range(cols + 1):
+        x = margin + c * cell_w
+        cv2.line(img, (x, margin), (x, margin + cell_h * rows), 0, 2)
+
+    cv2.putText(img, "sign", (margin + cell_w * (cols - 1) + 15, margin + 40),
+                cv2.FONT_HERSHEY_SCRIPT_SIMPLEX, 0.9, 0, 2)
+    return img
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        sheet_names = sys.argv[1:]
-    else:
-        sheet_names = ["1", "2", "3", "4", "5"]
+    import sys
 
-    run(sheet_names)
+    if len(sys.argv) > 1:
+        from thresholding import otsu_threshold
+        gray = cv2.imread(sys.argv[1], cv2.IMREAD_GRAYSCALE)
+        binary = otsu_threshold(gray)
+        name = os.path.splitext(os.path.basename(sys.argv[1]))[0]
+    else:
+        binary = make_test_table_image()
+        name = "demo"
+        print("no image given, using a synthetic test table image instead")
+
+    result = process_table_detection(binary, source_name=name)
+    print("table boundary:", result["table_boundary"])
+    print("rows:", result["rows"])
+    print("signature column:", result["signature_column"])
