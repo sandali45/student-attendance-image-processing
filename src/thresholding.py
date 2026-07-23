@@ -153,7 +153,7 @@ def make_test_image():
     return img
 
 
-def run(gray_img, out_dir="output/binary_images", source_name=None):
+def run(gray_img, out_dir="../output/binary_images", source_name=None):
     """Runs all the steps and saves the images. This is basically what
     the whole file is for."""
     gray_img = check_image(gray_img)
@@ -193,7 +193,7 @@ if __name__ == "__main__":
         run(img, source_name=img_path)
     else:
         img = make_test_image()
-        os.makedirs("output/grayscale_images", exist_ok=True)
-        cv2.imwrite("output/grayscale_images/demo_grayscale.png", img)
+        os.makedirs("../output/grayscale_images", exist_ok=True)
+        cv2.imwrite("../output/grayscale_images/demo_grayscale.png", img)
         print("no image given, using a fake test image instead")
         run(img)
