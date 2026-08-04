@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<attendance_info>
+    <subject>
+        <subject_name>Math</subject_name>
+        <subject_code>MTH101</subject_code>
+    </subject>
+    <students>
+        <student>
+            <index>001</index>
+            <name>John Snow</name>
+        </student>
+        <student>
+            <index>007</index>
+            <name>James Bond</name>
+        </student>
+        <student>
+            <index>009</index>
+            <name>Andare</name>
+        </student>
+    </students>
+</attendance_info>
