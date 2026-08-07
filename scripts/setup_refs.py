@@ -1,20 +1,30 @@
 import os
 import shutil
+import xml.etree.ElementTree as ET
 
-REF_BASE = "data/reference_signatures"
+# --- Path setup ---
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+INFO_XML_PATH = os.path.join(SCRIPT_DIR, "..", "data", "info.xml")
+REF_BASE = os.path.join(SCRIPT_DIR, "..", "data", "reference_signatures")
+
 os.makedirs(REF_BASE, exist_ok=True)
 
-ROW_TO_INDEX = {
-    1: "10000409",
-    2: "10009301",
-    3: "10009302",
-    4: "10009303",
-    5: "10009304",
-    6: "10009306",
-}
-    
+# --- Parse XML ---
+tree = ET.parse(INFO_XML_PATH)
+root = tree.getroot()
+
+# Build ROW_TO_INDEX dynamically from XML
+ROW_TO_INDEX = {}
+students = root.find("students")
+for i, student in enumerate(students.findall("student"), start=1):
+    student_index = student.find("index").text
+    ROW_TO_INDEX[i] = student_index
+
+print("Loaded mapping:", ROW_TO_INDEX)
+
+# --- Copy reference signatures ---
 for sheet_num in range(1, 5):
-    src_dir = f"output/signature_regions/sheet{sheet_num}_students"
+    src_dir = os.path.join(SCRIPT_DIR, "..", "output", "signature_regions", f"sheet{sheet_num}_students")
     
     for row_num, student_index in ROW_TO_INDEX.items():
         src_file = os.path.join(src_dir, f"row_{row_num:02d}.png")
