@@ -1,35 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<attendance>
+<attendance_info>
     <subject>
-        <code>CS402.3</code>
-        <name>Computer Graphics and Visualization</name>
-        <date>2019-05-31</date>
-        <lecturer>Dr. Rasika Ranaweera</lecturer>
+        <subject_name>Math</subject_name>
+        <subject_code>MTH101</subject_code>
     </subject>
     <students>
         <student>
-            <index>10000409</index>
-            <name>M S Dilshanika Perera</name>
+            <index>001</index>
+            <name>John Snow</name>
         </student>
         <student>
-            <index>10009301</index>
-            <name>C W M A Shehan Abeyrathne</name>
+            <index>007</index>
+            <name>James Bond</name>
         </student>
         <student>
-            <index>10009302</index>
-            <name>B A K M Chithrananda</name>
-        </student>
-        <student>
-            <index>10009303</index>
-            <name>W Shashini Minosha De Silva</name>
-        </student>
-        <student>
-            <index>10009304</index>
-            <name>K L Udara Maduranga Liyanage</name>
-        </student>
-        <student>
-            <index>10009306</index>
-            <name>Hansa Anuradha Wickramanayake</name>
+            <index>009</index>
+            <name>Andare</name>
         </student>
     </students>
-</attendance>
+</attendance_info>
