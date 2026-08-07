@@ -1,0 +1,16 @@
+Student: 007
+Row number: 2
+Sheets checked: 1
+
+[sheet5_students] output/signature_regions\sheet5_students\row_02.png
+  References compared: 4
+    - ref_1.png: SSIM=0.5665, ORB=0.4091, Combined=0.5035
+    - ref_2.png: SSIM=0.6528, ORB=0.0, Combined=0.3917
+    - ref_3.png: SSIM=0.6528, ORB=0.0, Combined=0.3917
+    - ref_4.png: SSIM=0.6405, ORB=0.0, Combined=0.3843
+  Best match: ref_1.png
+  Score: 0.5035
+  Decision: Not Matching
+
+Overall similarity score: 0.5035
+Overall decision: Not Matching
