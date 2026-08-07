@@ -1,21 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <attendance_info>
     <subject>
-        <subject_name>Math</subject_name>
-        <subject_code>MTH101</subject_code>
+        <subject_name>Computer Graphics and Visualization</subject_name>
+        <subject_code>CS402.3</subject_code>
     </subject>
     <students>
         <student>
-            <index>001</index>
-            <name>John Snow</name>
+            <index>10000409</index>
+            <name>M S Dilshanika Perera</name>
         </student>
         <student>
-            <index>007</index>
-            <name>James Bond</name>
+            <index>10009301</index>
+            <name>C W M A Shehan Abeyrathne</name>
         </student>
         <student>
-            <index>009</index>
-            <name>Andare</name>
+            <index>10009302</index>
+            <name>B A K M Chithrananda</name>
+        </student>
+        <student>
+            <index>10009303</index>
+            <name>W Shashini Minosha De Silva</name>
+        </student>
+        <student>
+            <index>10009304</index>
+            <name>K L Udara Maduranga Liyanage</name>
+        </student>
+        <student>
+            <index>10009306</index>
+            <name>Hansa Anuradha Wickramanayake</name>
         </student>
     </students>
 </attendance_info>

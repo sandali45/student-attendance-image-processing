@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 
 
-OUTPUT_DIR = "..\output\detected_tables"
+OUTPUT_DIR = os.path.join("output", "detected_tables")
 
 MIN_H_LINE_RATIO = 1 / 25
 MIN_V_LINE_RATIO = 1 / 25

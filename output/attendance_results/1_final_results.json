@@ -1,0 +1,80 @@
+{
+  "subject_name": "Computer Graphics and Visualization",
+  "subject_code": "CS402.3",
+  "date": "2026-08-07",
+  "sheet": "1.jpeg",
+  "raw_rows_detected": 7,
+  "student_rows_used": 6,
+  "threshold_method": "otsu",
+  "students": [
+    {
+      "row_number": 1,
+      "student_index": "10000409",
+      "student_name": "M S Dilshanika Perera",
+      "present": true,
+      "status": "Present",
+      "score": 0.2378,
+      "contour_count": 3,
+      "threshold": 0.02
+    },
+    {
+      "row_number": 2,
+      "student_index": "10009301",
+      "student_name": "C W M A Shehan Abeyrathne",
+      "present": true,
+      "status": "Present",
+      "score": 0.1403,
+      "contour_count": 1,
+      "threshold": 0.02
+    },
+    {
+      "row_number": 3,
+      "student_index": "10009302",
+      "student_name": "B A K M Chithrananda",
+      "present": true,
+      "status": "Present",
+      "score": 0.1684,
+      "contour_count": 2,
+      "threshold": 0.02
+    },
+    {
+      "row_number": 4,
+      "student_index": "10009303",
+      "student_name": "W Shashini Minosha De Silva",
+      "present": true,
+      "status": "Present",
+      "score": 0.149,
+      "contour_count": 1,
+      "threshold": 0.02
+    },
+    {
+      "row_number": 5,
+      "student_index": "10009304",
+      "student_name": "K L Udara Maduranga Liyanage",
+      "present": true,
+      "status": "Present",
+      "score": 0.0622,
+      "contour_count": 3,
+      "threshold": 0.02
+    },
+    {
+      "row_number": 6,
+      "student_index": "10009306",
+      "student_name": "Hansa Anuradha Wickramanayake",
+      "present": true,
+      "status": "Present",
+      "score": 0.0376,
+      "contour_count": 1,
+      "threshold": 0.02
+    }
+  ],
+  "stages": {
+    "Original": "C:\\Users\\DELL\\Downloads\\student-attendance-image-processing\\data\\signing_sheets\\1.jpeg",
+    "Corrected": "C:\\Users\\DELL\\Downloads\\student-attendance-image-processing\\output\\corrected_images\\1_corrected.png",
+    "Grayscale": "C:\\Users\\DELL\\Downloads\\student-attendance-image-processing\\output\\grayscale_images\\grayscale\\1.png",
+    "Gaussian": "C:\\Users\\DELL\\Downloads\\student-attendance-image-processing\\output\\grayscale_images\\gaussian\\1.png",
+    "Median": "C:\\Users\\DELL\\Downloads\\student-attendance-image-processing\\output\\grayscale_images\\median\\1.png",
+    "Enhanced": "C:\\Users\\DELL\\Downloads\\student-attendance-image-processing\\output\\grayscale_images\\enhanced\\1.png",
+    "Binary": "C:\\Users\\DELL\\Downloads\\student-attendance-image-processing\\output\\binary_images\\1_cleaned_binary.png"
+  }
+}
