@@ -12,7 +12,7 @@ ROW_TO_INDEX = {
     5: "10009304",
     6: "10009306",
 }
-
+    
 for sheet_num in range(1, 5):
     src_dir = f"output/signature_regions/sheet{sheet_num}_students"
     
