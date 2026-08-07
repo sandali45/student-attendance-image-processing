@@ -1,0 +1,436 @@
+import os
+import sys
+
+import cv2
+import numpy as np
+
+
+DEFAULT_MAX_DIMENSION = 1500
+
+
+MIN_SHEET_AREA_RATIO = 0.20
+MAX_SHEET_AREA_RATIO = 0.98
+
+OUTPUT_DIR_corrected_images = os.path.join("output", "corrected_images")
+OUTPUT_DIR_original_images = os.path.join("output", "original_images")
+OUTPUT_DIR_boundary_images = os.path.join("output", "boundary_images")
+
+
+def _validate_image(image):
+    if not isinstance(image, np.ndarray) or image.size == 0:
+        raise ValueError("Expected a non-empty image (numpy array)")
+
+
+def load_image(path):
+
+    if not isinstance(path, (str, os.PathLike)):
+        raise TypeError(
+            f"Image path must be a string, got {type(path).__name__}")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Image file not found: {path}")
+
+    image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    if image is None:
+        raise ValueError(f"File exists but is not a readable image: {path}")
+    return image
+
+
+def resize_image(image, max_dimension=DEFAULT_MAX_DIMENSION):
+
+    _validate_image(image)
+    if max_dimension <= 0:
+        raise ValueError(
+            f"max_dimension must be positive, got {max_dimension}")
+
+    height, width = image.shape[:2]
+    longest = max(height, width)
+    if longest <= max_dimension:
+        return image
+
+    scale = max_dimension / longest
+
+    new_width = int(round(width * scale))
+    new_height = int(round(height * scale))
+
+    new_size = (new_width, new_height)
+    return cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
+
+
+def rotate_image(image, angle):
+
+    _validate_image(image)
+
+    height, width = image.shape[:2]
+    center = (width / 2.0, height / 2.0)
+    matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+
+    # New bounding size after rotation.
+    cos = abs(matrix[0, 0])
+    sin = abs(matrix[0, 1])
+    new_width = int(height * sin + width * cos)
+    new_height = int(height * cos + width * sin)
+
+    # Shift so the rotated image stays centered in the new canvas.
+    matrix[0, 2] += (new_width / 2.0) - center[0]
+    matrix[1, 2] += (new_height / 2.0) - center[1]
+
+    return cv2.warpAffine(image, matrix, (new_width, new_height),
+                          borderValue=(255, 255, 255))
+
+
+def detect_sheet_boundary(image):
+
+    _validate_image(image)
+
+    best_quad = _detect_by_saturation(image) if image.ndim == 3 else None
+    if best_quad is None:
+        best_quad = _detect_by_edges(image)
+
+    if best_quad is None:
+        height, width = image.shape[:2]
+        best_quad = np.array([[0, 0], [width - 1, 0],
+                              [width - 1, height - 1], [0, height - 1]])
+
+    return _order_corners(np.asarray(best_quad, dtype=np.float32))
+
+
+def _detect_by_saturation(image):
+
+    saturation = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)[:, :, 1]
+    saturation = cv2.GaussianBlur(saturation, (5, 5), 0)
+    _, mask = cv2.threshold(saturation, 0, 255,
+                            cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((9, 9), np.uint8))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
+
+    contours, _ = cv2.findContours(
+        mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+    largest = max(contours, key=cv2.contourArea)
+
+    image_area = float(image.shape[0] * image.shape[1])
+    area_ratio = cv2.contourArea(largest) / image_area
+    if not MIN_SHEET_AREA_RATIO <= area_ratio <= MAX_SHEET_AREA_RATIO:
+        return None
+    return _contour_to_quad(largest)
+
+
+def _detect_by_edges(image):
+
+    gray = cv2.cvtColor(
+        image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+
+    edges = cv2.Canny(blurred, 50, 150)
+    edges = cv2.dilate(edges, np.ones((5, 5), np.uint8), iterations=2)
+
+    contours, _ = cv2.findContours(
+        edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    image_area = float(image.shape[0] * image.shape[1])
+
+    candidates = []
+    for contour in sorted(contours, key=cv2.contourArea, reverse=True)[:10]:
+        if cv2.contourArea(contour) < image_area * MIN_SHEET_AREA_RATIO:
+            break
+        candidates.append(_contour_to_quad(contour))
+
+    if not candidates:
+     return None
+
+    return max(candidates, key=lambda quad: _interior_brightness(gray, quad))
+
+
+def correct_perspective(image, corners):
+
+    _validate_image(image)
+    corners = np.asarray(corners, dtype=np.float32)
+    if corners.shape != (4, 2):
+        raise ValueError(
+            f"Expected 4 corner points (4, 2), got shape {corners.shape}")
+
+    top_left, top_right, bottom_right, bottom_left = corners
+
+    width = int(max(np.linalg.norm(bottom_right - bottom_left),
+                    np.linalg.norm(top_right - top_left)))
+    height = int(max(np.linalg.norm(top_right - bottom_right),
+                     np.linalg.norm(top_left - bottom_left)))
+    if width < 1 or height < 1:
+        raise ValueError("Corner points collapse to a degenerate rectangle")
+
+    destination = np.array([[0, 0], [width - 1, 0],
+                            [width - 1, height - 1], [0, height - 1]],
+                           dtype=np.float32)
+    matrix = cv2.getPerspectiveTransform(corners, destination)
+    return cv2.warpPerspective(image, matrix, (width, height))
+
+def crop_sheet(image):
+
+    corners = detect_sheet_boundary(image)
+    return correct_perspective(image, corners)
+
+
+def _ink_mask(gray):
+
+    background = cv2.GaussianBlur(gray, (0, 0), 25)
+    normalized = cv2.divide(gray, background, scale=255)
+    return cv2.threshold(normalized, 0, 255,
+                         cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+
+
+def _estimate_skew_angle(gray):
+
+    thresh = _ink_mask(gray)
+    width = gray.shape[1]
+    h_kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (max(20, width // 30), 1))
+    horizontal = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, h_kernel)
+
+    lines = cv2.HoughLinesP(horizontal, 1, np.pi / 180, threshold=100,
+                            minLineLength=width // 4, maxLineGap=20)
+    if lines is None:
+        return 0.0
+
+    angles = []
+    for x1, y1, x2, y2 in lines.reshape(-1, 4):
+        angle = np.degrees(np.arctan2(float(y2 - y1), float(x2 - x1)))
+        if abs(angle) <= 20:
+            angles.append(angle)
+    if not angles:
+        return 0.0
+    return float(np.median(angles))
+
+
+def deskew_image(image):
+
+    _validate_image(image)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    angle = _estimate_skew_angle(gray)
+    if abs(angle) < 0.1:
+        return image
+    return rotate_image(image, angle)
+
+
+def _detect_table_quad(gray):
+    """Four corners of the ruled table, found from its grid lines."""
+    mask = _ink_mask(gray)
+    height, width = gray.shape
+
+    h_kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (max(20, width // 25), 1))
+    v_kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (1, max(20, height // 25)))
+    horizontal = cv2.morphologyEx(mask, cv2.MORPH_OPEN, h_kernel)
+    vertical = cv2.morphologyEx(mask, cv2.MORPH_OPEN, v_kernel)
+
+    grid = cv2.bitwise_or(horizontal, vertical)
+    grid = cv2.dilate(
+        grid, cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7)))
+
+    contours, _ = cv2.findContours(
+        grid, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return None
+
+    largest = max(contours, key=cv2.contourArea)
+    if cv2.contourArea(largest) < 0.05 * height * width:
+        return None
+    quad = _contour_to_quad(largest)
+    return _order_corners(np.asarray(quad, dtype=np.float32))
+
+
+def _align_verticals(image):
+    """Shear so the table's column lines become exactly vertical.
+
+    A rectangle-fitting homography can leave a slight shear (verticals tilted
+    while horizontals are level). A horizontal shear removes it: it slides
+    each row sideways in proportion to its height, so vertical strokes stand
+    upright and horizontal strokes are untouched.
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    height, width = gray.shape
+
+    mask = _ink_mask(gray)
+    v_kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (1, max(20, height // 25)))
+    vertical = cv2.morphologyEx(mask, cv2.MORPH_OPEN, v_kernel)
+
+    lines = cv2.HoughLinesP(vertical, 1, np.pi / 180, 80,
+                            minLineLength=height // 8, maxLineGap=15)
+    if lines is None:
+        return image
+
+    ratios = []
+    for x1, y1, x2, y2 in lines.reshape(-1, 4):
+        dx, dy = float(x2 - x1), float(y2 - y1)
+        if dy < 0:
+            dx, dy = -dx, -dy
+        if dy > 2 * abs(dx) and dy > 0:  # near-vertical only
+            ratios.append(dx / dy)
+    if not ratios:
+        return image
+
+    shear = -float(np.median(ratios))
+    if abs(shear) < 0.002:
+        return image
+
+    matrix = np.array([[1, shear, 0], [0, 1, 0]], dtype=np.float32)
+    shift = -min(0.0, shear * height)  # keep all x >= 0 after the shear
+    matrix[0, 2] = shift
+    new_width = int(round(width + abs(shear) * height))
+    return cv2.warpAffine(image, matrix, (new_width, height),
+                          borderValue=(255, 255, 255))
+
+
+def rectify_by_table(image):
+    """Warp the page so the detected table is exactly axis-aligned.
+
+    Unlike a plain rotation, mapping the table's four corners onto an
+    upright rectangle also removes residual perspective, so every ruled
+    line becomes perfectly horizontal or vertical. The homography is applied
+    to the whole page (on an enlarged canvas) so the title text is preserved.
+    """
+    _validate_image(image)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+
+    quad = _detect_table_quad(gray)
+    if quad is None:
+        return deskew_image(image)
+
+    top_left, top_right, bottom_right, bottom_left = quad
+    width = max(np.linalg.norm(top_right - top_left),
+                np.linalg.norm(bottom_right - bottom_left))
+    height = max(np.linalg.norm(bottom_left - top_left),
+                 np.linalg.norm(bottom_right - top_right))
+    if width < 1 or height < 1:
+        return deskew_image(image)
+
+    destination = np.array([[0, 0], [width - 1, 0],
+                            [width - 1, height - 1], [0, height - 1]],
+                           dtype=np.float32)
+    matrix = cv2.getPerspectiveTransform(quad, destination)
+
+    # Grow the output canvas so nothing outside the table (e.g. the title)
+    # is clipped after the warp.
+    img_h, img_w = image.shape[:2]
+    img_corners = np.array([[0, 0], [img_w, 0], [img_w, img_h], [0, img_h]],
+                           dtype=np.float32).reshape(-1, 1, 2)
+    warped = cv2.perspectiveTransform(img_corners, matrix).reshape(-1, 2)
+    x_min, y_min = np.floor(warped.min(axis=0)).astype(int)
+    x_max, y_max = np.ceil(warped.max(axis=0)).astype(int)
+
+    offset = np.array([[1, 0, -x_min], [0, 1, -y_min], [0, 0, 1]],
+                      dtype=np.float32)
+    out_w = int(min(x_max - x_min, img_w * 3))
+    out_h = int(min(y_max - y_min, img_h * 3))
+    return cv2.warpPerspective(image, offset @ matrix, (out_w, out_h),
+                               borderValue=(255, 255, 255))
+
+
+def crop_to_content(image, margin=20):
+
+    _validate_image(image)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+
+    thresh = _ink_mask(gray)
+    # Drop specks, then fatten strokes so nearby text/lines fuse into one block.
+    thresh = cv2.morphologyEx(
+        thresh, cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+    dilated = cv2.dilate(
+        thresh, cv2.getStructuringElement(cv2.MORPH_RECT, (35, 35)))
+
+    contours, _ = cv2.findContours(
+        dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return image
+
+    # The title + table form the biggest connected block; stray marks
+    # (page annotations, punch-hole shadows) stay as smaller separate blobs.
+    largest = max(contours, key=cv2.contourArea)
+    x, y, w, h = cv2.boundingRect(largest)
+
+    x0 = max(x - margin, 0)
+    y0 = max(y - margin, 0)
+    x1 = min(x + w + margin, image.shape[1])
+    y1 = min(y + h + margin, image.shape[0])
+    return image[y0:y1, x0:x1]
+
+
+def process_sheet_image(path):
+
+    name = os.path.splitext(os.path.basename(path))[0]
+    os.makedirs(OUTPUT_DIR_corrected_images, exist_ok=True)
+    os.makedirs(OUTPUT_DIR_original_images, exist_ok=True)
+    os.makedirs(OUTPUT_DIR_boundary_images, exist_ok=True)
+
+    print(f"[1/4] Loading image: {path}")
+    image = load_image(path)
+
+    print(f"[2/4] Resizing from {image.shape[1]}x{image.shape[0]}")
+    image = resize_image(image)
+
+    print("[3/4] Detecting sheet boundary")
+    corners = detect_sheet_boundary(image)
+    boundary_preview = image.copy()
+    cv2.polylines(boundary_preview, [
+                  corners.astype(np.int32)], True, (0, 255, 0), 3)
+
+    print("[4/4] Correcting perspective, aligning table and cropping to content")
+    corrected = correct_perspective(image, corners)
+    corrected = rectify_by_table(corrected)
+    corrected = crop_to_content(corrected)
+    # With the table now filling the frame, straighten the columns. A single
+    # median shear may leave a fraction of a degree, so repeat until it
+    # converges, trimming the white wedges the shear leaves behind each time.
+    for _ in range(3):
+        straightened = _align_verticals(corrected)
+        if straightened is corrected:  # shear below threshold: already vertical
+            break
+        corrected = crop_to_content(straightened)
+
+    cv2.imwrite(os.path.join(OUTPUT_DIR_original_images,
+                f"{name}_original.png"), image)
+    cv2.imwrite(os.path.join(
+        OUTPUT_DIR_boundary_images, f"{name}_boundary.png"), boundary_preview)
+    cv2.imwrite(os.path.join(OUTPUT_DIR_corrected_images,
+                f"{name}_corrected.png"), corrected)
+    print(
+        f"Saved original, boundary and corrected images to {OUTPUT_DIR_corrected_images}")
+
+    return corrected
+
+
+def _order_corners(corners):
+
+    ordered = np.zeros((4, 2), dtype=np.float32)
+    sums = corners.sum(axis=1)
+    diffs = np.diff(corners, axis=1).ravel()  # y - x
+    ordered[0] = corners[np.argmin(sums)]   # top-left: smallest x + y
+    ordered[2] = corners[np.argmax(sums)]   # bottom-right: largest x + y
+    ordered[1] = corners[np.argmin(diffs)]  # top-right: smallest y - x
+    ordered[3] = corners[np.argmax(diffs)]  # bottom-left: largest y - x
+    return ordered
+
+
+def _contour_to_quad(contour):
+
+    perimeter = cv2.arcLength(contour, True)
+    approx = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
+    if len(approx) == 4:
+        return approx.reshape(4, 2)
+    return cv2.boxPoints(cv2.minAreaRect(contour))
+
+
+def _interior_brightness(gray, quad):
+
+    mask = np.zeros(gray.shape, dtype=np.uint8)
+    cv2.fillPoly(mask, [np.asarray(quad, dtype=np.int32)], 255)
+    return cv2.mean(gray, mask=mask)[0]
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+
+        sys.exit(1)
+    process_sheet_image(sys.argv[1])

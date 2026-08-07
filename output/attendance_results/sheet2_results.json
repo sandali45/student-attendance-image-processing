@@ -1,0 +1,62 @@
+[
+    {
+        "row_number": 1,
+        "present": true,
+        "status": "Present",
+        "score": 0.1764,
+        "ink_ratio": 0.1764,
+        "contour_count": 4,
+        "threshold": 0.02,
+        "filename": "row_01.png"
+    },
+    {
+        "row_number": 2,
+        "present": true,
+        "status": "Present",
+        "score": 0.716,
+        "ink_ratio": 0.716,
+        "contour_count": 4,
+        "threshold": 0.02,
+        "filename": "row_02.png"
+    },
+    {
+        "row_number": 3,
+        "present": true,
+        "status": "Present",
+        "score": 0.2413,
+        "ink_ratio": 0.2413,
+        "contour_count": 9,
+        "threshold": 0.02,
+        "filename": "row_03.png"
+    },
+    {
+        "row_number": 4,
+        "present": true,
+        "status": "Present",
+        "score": 0.2675,
+        "ink_ratio": 0.2675,
+        "contour_count": 3,
+        "threshold": 0.02,
+        "filename": "row_04.png"
+    },
+    {
+        "row_number": 5,
+        "present": true,
+        "status": "Present",
+        "score": 0.1871,
+        "ink_ratio": 0.1871,
+        "contour_count": 1,
+        "threshold": 0.02,
+        "filename": "row_05.png"
+    },
+    {
+        "row_number": 6,
+        "present": true,
+        "status": "Present",
+        "score": 0.2646,
+        "ink_ratio": 0.2646,
+        "contour_count": 2,
+        "threshold": 0.02,
+        "filename": "row_06.png"
+    }
+]

@@ -1,0 +1,62 @@
+[
+    {
+        "row_number": 1,
+        "present": true,
+        "status": "Present",
+        "score": 0.1125,
+        "ink_ratio": 0.1125,
+        "contour_count": 2,
+        "threshold": 0.02,
+        "filename": "row_01.png"
+    },
+    {
+        "row_number": 2,
+        "present": true,
+        "status": "Present",
+        "score": 0.2554,
+        "ink_ratio": 0.2554,
+        "contour_count": 1,
+        "threshold": 0.02,
+        "filename": "row_02.png"
+    },
+    {
+        "row_number": 3,
+        "present": true,
+        "status": "Present",
+        "score": 0.2055,
+        "ink_ratio": 0.2055,
+        "contour_count": 1,
+        "threshold": 0.02,
+        "filename": "row_03.png"
+    },
+    {
+        "row_number": 4,
+        "present": true,
+        "status": "Present",
+        "score": 0.2067,
+        "ink_ratio": 0.2067,
+        "contour_count": 2,
+        "threshold": 0.02,
+        "filename": "row_04.png"
+    },
+    {
+        "row_number": 5,
+        "present": true,
+        "status": "Present",
+        "score": 0.1784,
+        "ink_ratio": 0.1784,
+        "contour_count": 3,
+        "threshold": 0.02,
+        "filename": "row_05.png"
+    },
+    {
+        "row_number": 6,
+        "present": false,
+        "status": "Absent",
+        "score": 0.0769,
+        "ink_ratio": 0.0769,
+        "contour_count": 0,
+        "threshold": 0.02,
+        "filename": "row_06.png"
+    }
+]
