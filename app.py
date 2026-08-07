@@ -19,7 +19,6 @@ from src.visualization import (
     create_attendance_history_chart,
     create_subject_summary_chart,
 )
-from src.signature_verification import compare_with_reference_signatures
 
 
 # ------------------------------------------------------------
@@ -210,32 +209,18 @@ class AttendanceApp:
             style="Subtitle.TLabel",
         ).pack(anchor="w", pady=(2, 0))
 
-        badge = tk.Label(
-            header,
-            text="CS402.3",
-            bg="#EEF2FF",
-            fg=ACCENT_DARK,
-            font=("Segoe UI", 10, "bold"),
-            padx=14,
-            pady=7,
-        )
-        badge.pack(side="right")
-
     def _build_tabs(self):
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill="both", expand=True, padx=24, pady=(0, 22))
 
         self.process_tab = ttk.Frame(notebook, style="App.TFrame", padding=14)
         self.summary_tab = ttk.Frame(notebook, style="App.TFrame", padding=14)
-        self.verify_tab = ttk.Frame(notebook, style="App.TFrame", padding=14)
 
         notebook.add(self.process_tab, text="Process Attendance")
         notebook.add(self.summary_tab, text="Student Summary")
-        notebook.add(self.verify_tab, text="Signature Check")
 
         self._build_process_tab()
         self._build_summary_tab()
-        self._build_verify_tab()
 
     # --------------------------------------------------------
     # Small reusable pieces
@@ -806,180 +791,6 @@ class AttendanceApp:
                 self.chart_label,
                 "chart_photo",
                 max_size=(800, 430),
-            )
-
-    # --------------------------------------------------------
-    # Signature Verification
-    # --------------------------------------------------------
-    def _build_verify_tab(self):
-        verify_card = self._card(self.verify_tab)
-        verify_card.pack(fill="x")
-
-        content = tk.Frame(verify_card, bg=CARD)
-        content.pack(fill="x", padx=18, pady=18)
-        content.grid_columnconfigure(1, weight=1)
-
-        tk.Label(
-            content,
-            text="Signature Verification",
-            bg=CARD,
-            fg=TEXT,
-            font=("Segoe UI", 13, "bold"),
-        ).grid(row=0, column=0, columnspan=3, sticky="w")
-
-        tk.Label(
-            content,
-            text="Compare one new signature with the student's previous reference signatures.",
-            bg=CARD,
-            fg=MUTED,
-            font=("Segoe UI", 9),
-        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(2, 10))
-
-        self.verify_index_var = tk.StringVar()
-        self.candidate_var = tk.StringVar()
-        self.reference_var = tk.StringVar()
-
-        self._entry_row(
-            content,
-            "Student index",
-            self.verify_index_var,
-            row=2,
-        )
-
-        self._entry_row(
-            content,
-            "New signature",
-            self.candidate_var,
-            self._browse_candidate,
-            row=3,
-        )
-
-        self._entry_row(
-            content,
-            "Reference folder",
-            self.reference_var,
-            self._browse_reference_dir,
-            row=4,
-        )
-
-        buttons = tk.Frame(content, bg=CARD)
-        buttons.grid(row=5, column=0, columnspan=3, pady=(12, 2))
-
-        ttk.Button(
-            buttons,
-            text="Use Student Reference Folder",
-            style="Soft.TButton",
-            command=self._set_default_refs,
-        ).pack(side="left", padx=(0, 8))
-
-        ttk.Button(
-            buttons,
-            text="Verify Signature",
-            style="Accent.TButton",
-            command=self._verify_signature,
-        ).pack(side="left")
-
-        result_card = self._card(self.verify_tab)
-        result_card.pack(fill="x", pady=(12, 0))
-
-        result_inner = tk.Frame(result_card, bg=CARD)
-        result_inner.pack(fill="x", padx=18, pady=18)
-
-        tk.Label(
-            result_inner,
-            text="Verification Result",
-            bg=CARD,
-            fg=TEXT,
-            font=("Segoe UI", 12, "bold"),
-        ).pack(anchor="w")
-
-        self.verify_result = tk.Label(
-            result_inner,
-            text="No signature checked yet.",
-            bg=CARD,
-            fg=MUTED,
-            font=("Segoe UI", 10),
-            justify="left",
-            anchor="w",
-        )
-        self.verify_result.pack(fill="x", pady=(8, 0))
-
-    def _set_default_refs(self):
-        index = self.verify_index_var.get().strip()
-
-        if not index:
-            messagebox.showerror(
-                "Missing student",
-                "Enter the student index first.",
-            )
-            return
-
-        self.reference_var.set(
-            str(ROOT / "data" / "reference_signatures" / index)
-        )
-
-    def _browse_candidate(self):
-        path = filedialog.askopenfilename(
-            title="Select candidate signature",
-            filetypes=[
-                ("Image files", "*.png *.jpg *.jpeg"),
-                ("All files", "*.*"),
-            ],
-        )
-
-        if path:
-            self.candidate_var.set(path)
-
-    def _browse_reference_dir(self):
-        path = filedialog.askdirectory(
-            title="Select reference-signature folder"
-        )
-
-        if path:
-            self.reference_var.set(path)
-
-    def _verify_signature(self):
-        candidate = self.candidate_var.get().strip()
-        reference_dir = self.reference_var.get().strip()
-
-        if not Path(candidate).is_file():
-            messagebox.showerror(
-                "Missing candidate",
-                "Select a valid candidate signature image.",
-            )
-            return
-
-        if not Path(reference_dir).is_dir():
-            messagebox.showerror(
-                "Missing references",
-                "Select a valid reference-signature folder.",
-            )
-            return
-
-        try:
-            result = compare_with_reference_signatures(
-                candidate,
-                reference_dir,
-                threshold=0.65,
-            )
-
-            decision = result["decision"]
-            colour = GREEN if "match" in decision.lower() and "not" not in decision.lower() else RED
-
-            self.verify_result.configure(
-                text=(
-                    f"{decision}\n\n"
-                    f"Similarity: {result['best_score']:.1%}\n"
-                    f"Best reference: {result['best_reference'] or 'N/A'}\n"
-                    f"References compared: {result['reference_count']}"
-                ),
-                fg=colour,
-            )
-
-        except Exception as exc:
-            messagebox.showerror(
-                "Verification error",
-                str(exc),
             )
 
     # --------------------------------------------------------
