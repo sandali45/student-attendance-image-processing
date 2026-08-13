@@ -1,1 +1,0 @@
-# student-attendance-image-processing
