@@ -297,20 +297,6 @@ database/attendance.db
 | 9 | Attendance visualization |
 | 10 | Signature verification |
 
-## Coursework Deliverables
 
-The final coursework submission contains:
 
-- **Prototype ZIP** – the complete runnable project
-- **Report** – screenshots, testing results, discussion, technologies, and individual contributions
 
-## Notes
-
-- The project is designed for the provided static signing-sheet layout.
-- The XML student count and order should match the detected student rows.
-- The UI is an additional front end; `sams.py`, `infovis.py`, and `investigate.py` remain available as command-line programs.
-- Keep test signatures separate from their own reference images when evaluating signature similarity.
-
-## Repository
-
-https://github.com/sandali45/student-attendance-image-processing
